@@ -18,15 +18,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import matplotlib
-# Use interactive backend when available (shows plots on screen on a PC/Mac).
-# Falls back to Agg (file-only) automatically in headless / server environments.
-try:
-    matplotlib.use("TkAgg")
-except Exception:
-    try:
-        matplotlib.use("Qt5Agg")
-    except Exception:
-        matplotlib.use("Agg")   # safe fallback: charts saved as PNG files only
+# Agg backend works on every platform (Windows, Mac, Linux, servers).
+# Charts are always saved as PNG files in the results/ folder.
+# On your PC just open the PNG files from results/ to view them.
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import seaborn as sns
