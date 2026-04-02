@@ -1,0 +1,4 @@
+algorithm,predicted_yield_t_ha,irrigation_water_l_ha,fertilizer_n_kg_ha,energy_kwh_ha,normalised_cost,objective_value,elapsed_seconds
+Genetic Algorithm,3.483,1500.0,10.0,300.0,12.09,-0.166911,0.452
+PSO,3.404,1705.8,36.31,135.9,13.07,-0.159389,0.234
+Linear Programming,3.483,1500.0,10.0,300.0,12.09,-0.166911,2.064

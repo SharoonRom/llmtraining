@@ -2,13 +2,17 @@
 Visualization module for the precision agriculture optimization system.
 
 Generates all charts required by the project:
-  1. Algorithm performance comparison (bar chart)
-  2. Resource usage comparison table / chart
-  3. Convergence curves for each algorithm
-  4. Feature importance (crop yield predictor)
-  5. Predicted yield distribution
-  6. Climate vs yield scatter plots
-  7. Summary results table (console + CSV)
+  1.  Algorithm performance comparison (bar chart)
+  2.  Resource usage comparison table / chart
+  3.  Convergence curves for each algorithm
+  4.  Feature importance (crop yield predictor)
+  5.  Predicted yield distribution
+  6.  Climate vs yield scatter plots
+  7.  Summary results table (console + CSV)
+  8.  Actual vs Predicted yield scatter (new)
+  9.  Residual plot (new)
+  10. Statistical summary bar chart (mean ± std) (new)
+  11. ANOVA / t-test p-value heatmap (new)
 """
 
 from __future__ import annotations
@@ -412,3 +416,225 @@ def save_results_table(
     print(f"  Saved: {out_csv}")
 
     return str(out_csv)
+
+
+# ------------------------------------------------------------------
+# 8. Actual vs Predicted yield scatter
+# ------------------------------------------------------------------
+
+def plot_actual_vs_predicted(
+    y_true: "np.ndarray",
+    y_pred: "np.ndarray",
+    stats_dict: dict,
+    output_dir: str = "results",
+) -> str:
+    """Scatter plot of actual vs predicted crop yield with perfect-fit line."""
+    _ensure_dir(Path(output_dir))
+    out = Path(output_dir) / "actual_vs_predicted.png"
+
+    fig, ax = plt.subplots(figsize=(7, 7))
+
+    ax.scatter(y_true, y_pred, alpha=0.45, s=18, color="#2196F3", label="Samples")
+
+    # Perfect prediction line
+    lo = min(y_true.min(), y_pred.min()) - 0.1
+    hi = max(y_true.max(), y_pred.max()) + 0.1
+    ax.plot([lo, hi], [lo, hi], "r--", linewidth=1.8, label="Perfect fit (y=x)")
+
+    ax.set_xlabel("Actual Yield (t/ha)")
+    ax.set_ylabel("Predicted Yield (t/ha)")
+    ax.set_title(
+        f"Actual vs Predicted Crop Yield\n"
+        f"R²={stats_dict['r2']}  RMSE={stats_dict['rmse']} t/ha  "
+        f"MAE={stats_dict['mae']} t/ha",
+        fontweight="bold",
+    )
+    ax.legend(frameon=False)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+
+    plt.tight_layout()
+    plt.savefig(out, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"  Saved: {out}")
+    return str(out)
+
+
+# ------------------------------------------------------------------
+# 9. Residual plot
+# ------------------------------------------------------------------
+
+def plot_residuals(
+    y_true: "np.ndarray",
+    y_pred: "np.ndarray",
+    stats_dict: dict,
+    output_dir: str = "results",
+) -> str:
+    """Residual histogram + residuals vs predicted scatter."""
+    _ensure_dir(Path(output_dir))
+    out = Path(output_dir) / "residuals.png"
+
+    residuals = y_true - y_pred
+
+    fig, axes = plt.subplots(1, 2, figsize=(13, 5))
+    fig.suptitle(
+        f"Residual Analysis   "
+        f"Mean={stats_dict['resid_mean']}  Std={stats_dict['resid_std']}  "
+        f"Shapiro-Wilk p={stats_dict['shapiro_wilk_p']}",
+        fontsize=11, fontweight="bold",
+    )
+
+    # Histogram of residuals
+    sns.histplot(residuals, kde=True, ax=axes[0], color="#FF9800", bins=30)
+    axes[0].axvline(0, color="red", linewidth=1.5, linestyle="--")
+    axes[0].set_title("Distribution of Residuals")
+    axes[0].set_xlabel("Residual (t/ha)")
+    axes[0].spines["top"].set_visible(False)
+    axes[0].spines["right"].set_visible(False)
+
+    # Residuals vs Predicted
+    axes[1].scatter(y_pred, residuals, alpha=0.4, s=14, color="#9C27B0")
+    axes[1].axhline(0, color="red", linewidth=1.5, linestyle="--")
+    axes[1].set_title("Residuals vs Predicted")
+    axes[1].set_xlabel("Predicted Yield (t/ha)")
+    axes[1].set_ylabel("Residual (t/ha)")
+    axes[1].spines["top"].set_visible(False)
+    axes[1].spines["right"].set_visible(False)
+
+    plt.tight_layout()
+    plt.savefig(out, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"  Saved: {out}")
+    return str(out)
+
+
+# ------------------------------------------------------------------
+# 10. Statistical summary: mean ± std per algorithm
+# ------------------------------------------------------------------
+
+def plot_statistical_summary(
+    alg_stats: dict,
+    output_dir: str = "results",
+) -> str:
+    """
+    Bar chart showing key metrics per algorithm with descriptive stats overlay.
+    Displays: yield, water, cost, runtime — with value labels.
+    """
+    _ensure_dir(Path(output_dir))
+    out = Path(output_dir) / "statistical_summary.png"
+
+    rows  = alg_stats["per_algorithm"]
+    names = [r["algorithm"] for r in rows]
+    colours = [PALETTE.get(n, "#607D8B") for n in names]
+
+    metrics = [
+        ("predicted_yield_t_ha",  "Predicted Yield (t/ha)"),
+        ("irrigation_water_l_ha", "Water Usage (L/ha)"),
+        ("normalised_cost",       "Resource Cost (%)"),
+        ("elapsed_seconds",       "Runtime (s)"),
+    ]
+
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    fig.suptitle(
+        "Statistical Summary — All Algorithms\n"
+        f"Yield mean={alg_stats['descriptive']['yield_mean']} t/ha  "
+        f"std={alg_stats['descriptive']['yield_std']} t/ha  "
+        f"range={alg_stats['descriptive']['yield_range']} t/ha",
+        fontsize=12, fontweight="bold",
+    )
+
+    for ax, (key, label) in zip(axes.flatten(), metrics):
+        vals = [r[key] for r in rows]
+        bars = ax.bar(names, vals, color=colours, edgecolor="white", width=0.55)
+        ax.set_title(label, fontweight="bold")
+        ax.set_ylim(0, max(vals) * 1.30 if max(vals) > 0 else 1)
+        for bar, val in zip(bars, vals):
+            ax.text(
+                bar.get_x() + bar.get_width() / 2,
+                bar.get_height() + max(vals) * 0.02,
+                f"{val:.3f}",
+                ha="center", va="bottom", fontsize=8,
+            )
+        ax.tick_params(axis="x", rotation=15)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+
+    plt.tight_layout()
+    plt.savefig(out, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"  Saved: {out}")
+    return str(out)
+
+
+# ------------------------------------------------------------------
+# 11. ANOVA / t-test p-value heatmap
+# ------------------------------------------------------------------
+
+def plot_statistical_tests(
+    alg_stats: dict,
+    output_dir: str = "results",
+) -> str:
+    """Heatmap of pairwise t-test p-values + ANOVA result annotation."""
+    _ensure_dir(Path(output_dir))
+    out = Path(output_dir) / "statistical_tests.png"
+
+    ttests = alg_stats["pairwise_ttests"]
+    anova  = alg_stats["anova"]
+
+    # Collect algorithm names
+    names = list(dict.fromkeys(
+        [t["algorithm_A"] for t in ttests] +
+        [t["algorithm_B"] for t in ttests]
+    ))
+    n = len(names)
+
+    # Build p-value matrix (diagonal = 1.0 = not significant vs itself)
+    p_matrix = np.ones((n, n))
+    d_matrix = np.zeros((n, n))   # yield diff matrix
+
+    idx = {name: i for i, name in enumerate(names)}
+    for t in ttests:
+        i, j = idx[t["algorithm_A"]], idx[t["algorithm_B"]]
+        p_matrix[i, j] = t["p_value"]
+        p_matrix[j, i] = t["p_value"]
+        d_matrix[i, j] = t["yield_diff"]
+        d_matrix[j, i] = -t["yield_diff"]
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    fig.suptitle(
+        f"Inferential Statistics\n"
+        f"One-Way ANOVA: F={anova.get('f_statistic','N/A')}  "
+        f"p={anova.get('p_value','N/A')}  "
+        f"Significant={anova.get('significant','N/A')}",
+        fontsize=11, fontweight="bold",
+    )
+
+    # p-value heatmap
+    im0 = axes[0].imshow(p_matrix, vmin=0, vmax=1, cmap="RdYlGn_r", aspect="auto")
+    axes[0].set_xticks(range(n)); axes[0].set_xticklabels(names, rotation=20, ha="right")
+    axes[0].set_yticks(range(n)); axes[0].set_yticklabels(names)
+    axes[0].set_title("Pairwise t-test p-values\n(green=p<0.05 significant)", fontweight="bold")
+    for i in range(n):
+        for j in range(n):
+            sig = "*" if p_matrix[i, j] < 0.05 and i != j else ""
+            axes[0].text(j, i, f"{p_matrix[i,j]:.3f}{sig}",
+                         ha="center", va="center", fontsize=8, color="black")
+    plt.colorbar(im0, ax=axes[0], label="p-value")
+
+    # Yield difference heatmap
+    vabs = max(abs(d_matrix.max()), abs(d_matrix.min()), 0.001)
+    im1 = axes[1].imshow(d_matrix, vmin=-vabs, vmax=vabs, cmap="RdBu", aspect="auto")
+    axes[1].set_xticks(range(n)); axes[1].set_xticklabels(names, rotation=20, ha="right")
+    axes[1].set_yticks(range(n)); axes[1].set_yticklabels(names)
+    axes[1].set_title("Yield Difference (t/ha)\nrow − column", fontweight="bold")
+    for i in range(n):
+        for j in range(n):
+            axes[1].text(j, i, f"{d_matrix[i,j]:+.3f}",
+                         ha="center", va="center", fontsize=8, color="black")
+    plt.colorbar(im1, ax=axes[1], label="Δ yield (t/ha)")
+
+    plt.tight_layout()
+    plt.savefig(out, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"  Saved: {out}")
+    return str(out)

@@ -1,0 +1,4 @@
+algorithm_A,algorithm_B,t_statistic,p_value,significant,yield_diff
+Genetic Algorithm,PSO,10.7713,0.0,True,0.079
+Genetic Algorithm,Linear Programming,0.6254,0.5341,False,0.0
+PSO,Linear Programming,-10.7807,0.0,True,-0.079

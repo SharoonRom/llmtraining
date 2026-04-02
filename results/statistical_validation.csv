@@ -1,0 +1,2 @@
+label,n_samples,actual_mean,actual_std,actual_variance,actual_min,actual_max,pred_mean,pred_std,pred_variance,pred_min,pred_max,resid_mean,resid_std,resid_variance,rmse,mae,r2,mape_pct,shapiro_wilk_stat,shapiro_wilk_p,residuals_normal
+Gradient Boosting / Random Forest,300,2.2974,0.89,0.7921,0.3027,4.6766,2.3052,0.8357,0.6983,0.7918,4.3158,-0.007739,0.2204,0.0486,0.2201,0.1735,0.9386,9.35,0.9933,0.2002,True
