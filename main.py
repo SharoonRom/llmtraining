@@ -179,10 +179,29 @@ def main() -> None:
     # ── Step 6 : QAOA ────────────────────────────────────────────────
     if not args.skip_qaoa:
         banner("STEP 6 — QAOA (Qiskit Aer Simulator)")
-        from src.optimization.qaoa import QAOAOptimizer
-        qaoa = QAOAOptimizer(config=config, p_layers=args.qaoa_p)
-        qaoa_result = qaoa.optimise(verbose=args.verbose)
-        all_results.append(qaoa_result)
+        try:
+            from src.optimization.qaoa import QAOAOptimizer, QISKIT_AVAILABLE
+            if not QISKIT_AVAILABLE:
+                print(
+                    "\n  [WARNING] Qiskit / qiskit-aer is NOT installed.\n"
+                    "  Install with:  pip install qiskit qiskit-aer\n"
+                    "  Running classical fallback for QAOA slot...\n"
+                )
+            qaoa        = QAOAOptimizer(config=config, p_layers=args.qaoa_p)
+            qaoa_result = qaoa.optimise(verbose=args.verbose)
+            all_results.append(qaoa_result)
+            print(
+                f"\n  QAOA qiskit_used={qaoa_result.get('qiskit_used')} | "
+                f"qubits={qaoa_result.get('n_qubits')} | "
+                f"p={qaoa_result.get('p_layers')}"
+            )
+        except Exception as exc:
+            print(
+                f"\n  [ERROR] QAOA failed: {exc}\n"
+                f"  Cause: most likely Qiskit is not installed or there is a\n"
+                f"  version mismatch.  Fix:  pip install qiskit>=1.0 qiskit-aer>=0.14\n"
+                f"  The other 3 algorithm results will still be plotted.\n"
+            )
     else:
         print("\n  [QAOA skipped via --skip-qaoa flag]")
 

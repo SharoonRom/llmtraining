@@ -356,14 +356,34 @@ class QAOAOptimizer:
         best_bits = None
         best_val  = float("inf")
         for bitstring in counts:
-            bits = np.array(
-                [int(b) for b in reversed(bitstring)], dtype=int
-            )
-            x     = self.problem.decode_from_binary(bits)
-            val   = self.problem.objective(x)
+            # Strip any whitespace/separator characters Qiskit may add
+            clean = bitstring.replace(" ", "")
+            try:
+                bits = np.array([int(b) for b in reversed(clean)], dtype=int)
+            except ValueError:
+                continue
+            # Pad or trim to expected length if needed
+            expected_len = cfg.n_vars * cfg.n_bits
+            if len(bits) < expected_len:
+                bits = np.pad(bits, (0, expected_len - len(bits)))
+            elif len(bits) > expected_len:
+                bits = bits[:expected_len]
+            x   = self.problem.decode_from_binary(bits)
+            val = self.problem.objective(x)
             if val < best_val:
                 best_val  = val
                 best_bits = bits
 
-        best_x = self.problem.decode_from_binary(best_bits)
+        # Safety fallback: if no valid bit-string was found use midpoint solution
+        if best_bits is None:
+            warnings.warn(
+                "QAOA: no valid bit-string found in measurement counts. "
+                "Falling back to midpoint solution.",
+                RuntimeWarning,
+            )
+            best_x   = (cfg.lower_bounds + cfg.upper_bounds) / 2.0
+            best_val = self.problem.objective(best_x)
+        else:
+            best_x = self.problem.decode_from_binary(best_bits)
+
         return best_x, best_val, history

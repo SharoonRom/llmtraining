@@ -18,7 +18,15 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import matplotlib
-matplotlib.use("Agg")   # non-interactive backend (safe for headless environments)
+# Use interactive backend when available (shows plots on screen on a PC/Mac).
+# Falls back to Agg (file-only) automatically in headless / server environments.
+try:
+    matplotlib.use("TkAgg")
+except Exception:
+    try:
+        matplotlib.use("Qt5Agg")
+    except Exception:
+        matplotlib.use("Agg")   # safe fallback: charts saved as PNG files only
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import seaborn as sns
@@ -188,9 +196,15 @@ def plot_convergence(
 
     for res in results:
         hist   = res.get("convergence", [])
-        if not hist:
-            continue
         colour = PALETTE.get(res["algorithm"], "#607D8B")
+        if not hist:
+            # No convergence history — draw a single horizontal line at final objective
+            final_val = res.get("objective_value", 0)
+            ax.axhline(
+                final_val, color=colour, linewidth=2,
+                linestyle="--", label=f"{res['algorithm']} (single point)",
+            )
+            continue
         # Running minimum for monotone curve
         running_min = np.minimum.accumulate(hist)
         ax.plot(
