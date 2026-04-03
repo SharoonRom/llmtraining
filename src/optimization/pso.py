@@ -40,8 +40,12 @@ class PSOOptimizer:
         c1: float = 1.494,
         c2: float = 1.494,
         w: float  = 0.729,
+        ml_model=None,
+        preprocessor=None,
     ):
-        self.problem     = AgricultureOptimizationProblem(config)
+        self.problem     = AgricultureOptimizationProblem(
+            config, ml_model=ml_model, preprocessor=preprocessor
+        )
         self.n_particles = n_particles
         self.n_iters     = n_iters
         self.options     = {"c1": c1, "c2": c2, "w": w}

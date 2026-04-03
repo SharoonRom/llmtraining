@@ -638,3 +638,126 @@ def plot_statistical_tests(
     plt.close()
     print(f"  Saved: {out}")
     return str(out)
+
+
+# ------------------------------------------------------------------
+# 12. Learning curve (train vs validation R²)
+# ------------------------------------------------------------------
+
+def plot_learning_curve(
+    lc_stats: dict,
+    output_dir: str = "results",
+) -> str:
+    """
+    Line chart showing train and validation R² as training size grows.
+    Reveals over/under-fitting and whether more data would help.
+    """
+    _ensure_dir(Path(output_dir))
+    out = Path(output_dir) / "learning_curve.png"
+
+    ts   = lc_stats["train_sizes_abs"]
+    tr_m = np.array(lc_stats["train_scores_mean"])
+    tr_s = np.array(lc_stats["train_scores_std"])
+    va_m = np.array(lc_stats["val_scores_mean"])
+    va_s = np.array(lc_stats["val_scores_std"])
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.fill_between(ts, tr_m - tr_s, tr_m + tr_s, alpha=0.15, color="#2196F3")
+    ax.fill_between(ts, va_m - va_s, va_m + va_s, alpha=0.15, color="#4CAF50")
+    ax.plot(ts, tr_m, "o-", color="#2196F3", label="Train R²",      linewidth=2)
+    ax.plot(ts, va_m, "s-", color="#4CAF50", label="Validation R²", linewidth=2)
+
+    ax.set_xlabel("Training Set Size (samples)")
+    ax.set_ylabel("R² Score")
+    ax.set_title(
+        "Learning Curve — Crop Yield Predictor\n"
+        f"Final train R²={tr_m[-1]:.4f}  val R²={va_m[-1]:.4f}  "
+        f"gap={tr_m[-1]-va_m[-1]:.4f}",
+        fontweight="bold",
+    )
+    ax.legend(frameon=False)
+    ax.set_ylim(max(0, min(va_m) - 0.1), 1.02)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+
+    plt.tight_layout()
+    plt.savefig(out, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"  Saved: {out}")
+    return str(out)
+
+
+# ------------------------------------------------------------------
+# 13. Per-crop RMSE / R² bar charts (bias / fairness analysis)
+# ------------------------------------------------------------------
+
+def plot_per_crop_errors(
+    per_crop_df: "pd.DataFrame",
+    output_dir: str = "results",
+) -> str:
+    """
+    Side-by-side bar charts of RMSE and R² for each crop type.
+    Highlights model bias toward/against certain crops.
+    """
+    _ensure_dir(Path(output_dir))
+    out = Path(output_dir) / "per_crop_errors.png"
+
+    crops = per_crop_df["crop_type"].tolist()
+    rmse  = per_crop_df["rmse"].tolist()
+    r2    = per_crop_df["r2"].tolist()
+    mae   = per_crop_df["mae"].tolist()
+
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+    fig.suptitle(
+        "Per-Crop Bias / Fairness Analysis\n"
+        "Model accuracy broken down by crop type",
+        fontsize=12, fontweight="bold",
+    )
+
+    crop_colours = plt.cm.Set2(np.linspace(0, 1, len(crops)))
+
+    # RMSE
+    bars = axes[0].bar(crops, rmse, color=crop_colours, edgecolor="white", width=0.6)
+    axes[0].set_title("RMSE (t/ha) — lower=better", fontweight="bold")
+    axes[0].set_ylabel("RMSE (t/ha)")
+    for bar, val in zip(bars, rmse):
+        axes[0].text(
+            bar.get_x() + bar.get_width() / 2,
+            bar.get_height() + 0.005,
+            f"{val:.3f}", ha="center", va="bottom", fontsize=9,
+        )
+    axes[0].spines["top"].set_visible(False)
+    axes[0].spines["right"].set_visible(False)
+
+    # MAE
+    bars = axes[1].bar(crops, mae, color=crop_colours, edgecolor="white", width=0.6)
+    axes[1].set_title("MAE (t/ha) — lower=better", fontweight="bold")
+    axes[1].set_ylabel("MAE (t/ha)")
+    for bar, val in zip(bars, mae):
+        axes[1].text(
+            bar.get_x() + bar.get_width() / 2,
+            bar.get_height() + 0.005,
+            f"{val:.3f}", ha="center", va="bottom", fontsize=9,
+        )
+    axes[1].spines["top"].set_visible(False)
+    axes[1].spines["right"].set_visible(False)
+
+    # R²
+    bars = axes[2].bar(crops, r2, color=crop_colours, edgecolor="white", width=0.6)
+    axes[2].set_title("R² Score — higher=better", fontweight="bold")
+    axes[2].set_ylabel("R²")
+    axes[2].set_ylim(0, 1.05)
+    for bar, val in zip(bars, r2):
+        axes[2].text(
+            bar.get_x() + bar.get_width() / 2,
+            bar.get_height() + 0.01,
+            f"{val:.3f}", ha="center", va="bottom", fontsize=9,
+        )
+    axes[2].spines["top"].set_visible(False)
+    axes[2].spines["right"].set_visible(False)
+
+    plt.tight_layout()
+    plt.savefig(out, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"  Saved: {out}")
+    return str(out)

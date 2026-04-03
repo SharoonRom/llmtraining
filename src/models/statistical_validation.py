@@ -28,10 +28,12 @@ from __future__ import annotations
 
 import warnings
 from pathlib import Path
+from typing import Optional
 
 import numpy as np
 import pandas as pd
 from scipy import stats
+from sklearn.model_selection import learning_curve
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -274,10 +276,113 @@ def print_algorithm_statistics(alg_stats: dict) -> None:
     print(f"{'='*60}")
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# 3.  Per-Crop Bias / Fairness Analysis
+# ─────────────────────────────────────────────────────────────────────────────
+
+def compute_per_crop_statistics(
+    y_true:     np.ndarray,
+    y_pred:     np.ndarray,
+    crop_labels: np.ndarray,
+) -> pd.DataFrame:
+    """
+    Compute RMSE, MAE and R² broken down by crop type.
+
+    Parameters
+    ----------
+    y_true      : actual yield values
+    y_pred      : predicted yield values
+    crop_labels : array of crop type strings aligned with y_true / y_pred
+
+    Returns
+    -------
+    DataFrame with one row per crop type and columns:
+      crop_type, n_samples, rmse, mae, r2, mean_actual, mean_predicted
+    """
+    rows = []
+    for crop in sorted(set(crop_labels)):
+        mask    = crop_labels == crop
+        yt      = y_true[mask]
+        yp      = y_pred[mask]
+        if len(yt) < 2:
+            continue
+        residuals = yt - yp
+        rmse  = float(np.sqrt(np.mean(residuals ** 2)))
+        mae   = float(np.mean(np.abs(residuals)))
+        ss_res = float(np.sum(residuals ** 2))
+        ss_tot = float(np.sum((yt - yt.mean()) ** 2))
+        r2    = 1.0 - ss_res / ss_tot if ss_tot > 0 else 0.0
+        rows.append({
+            "crop_type":       crop,
+            "n_samples":       int(mask.sum()),
+            "rmse":            round(rmse, 4),
+            "mae":             round(mae,  4),
+            "r2":              round(r2,   4),
+            "mean_actual":     round(float(yt.mean()), 4),
+            "mean_predicted":  round(float(yp.mean()), 4),
+        })
+    return pd.DataFrame(rows)
+
+
+def print_per_crop_statistics(df: pd.DataFrame) -> None:
+    """Pretty-print per-crop statistics."""
+    print(f"\n{'='*60}")
+    print(f"  PER-CROP BIAS / FAIRNESS ANALYSIS")
+    print(f"{'='*60}")
+    print(df.to_string(index=False))
+    print(f"{'='*60}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 4.  Learning Curve Statistics
+# ─────────────────────────────────────────────────────────────────────────────
+
+def compute_learning_curve_stats(
+    model,
+    X: pd.DataFrame,
+    y: np.ndarray,
+    cv: int = 5,
+    n_points: int = 8,
+) -> dict:
+    """
+    Compute learning curve data (train vs validation R²).
+
+    Parameters
+    ----------
+    model    : unfitted sklearn estimator
+    X        : feature DataFrame
+    y        : target array
+    cv       : cross-validation folds
+    n_points : number of training-size points
+
+    Returns
+    -------
+    dict with train_sizes, train_scores_mean/std, val_scores_mean/std
+    """
+    train_sizes = np.linspace(0.10, 1.0, n_points)
+    ts, tr_scores, val_scores = learning_curve(
+        model, X, y,
+        train_sizes=train_sizes,
+        cv=cv,
+        scoring="r2",
+        n_jobs=-1,
+        shuffle=True,
+        random_state=42,
+    )
+    return {
+        "train_sizes_abs":   ts.tolist(),
+        "train_scores_mean": np.mean(tr_scores,  axis=1).round(4).tolist(),
+        "train_scores_std":  np.std(tr_scores,   axis=1).round(4).tolist(),
+        "val_scores_mean":   np.mean(val_scores, axis=1).round(4).tolist(),
+        "val_scores_std":    np.std(val_scores,  axis=1).round(4).tolist(),
+    }
+
+
 def save_statistics_csv(
     pred_stats:  dict,
     alg_stats:   dict,
     output_dir:  str = "results",
+    per_crop_df: Optional[pd.DataFrame] = None,
 ) -> str:
     """Save all statistical results to CSV files."""
     out = Path(output_dir)
@@ -305,4 +410,10 @@ def save_statistics_csv(
     print(f"  Saved: {out}/algorithm_statistics.csv")
     print(f"  Saved: {out}/anova_results.csv")
     print(f"  Saved: {out}/ttest_results.csv")
+
+    # Per-crop bias analysis (optional)
+    if per_crop_df is not None and not per_crop_df.empty:
+        per_crop_df.to_csv(out / "per_crop_statistics.csv", index=False)
+        print(f"  Saved: {out}/per_crop_statistics.csv")
+
     return str(out)

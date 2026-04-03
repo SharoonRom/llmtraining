@@ -45,6 +45,8 @@ class GeneticAlgorithmOptimizer:
     tournament_size : Tournament selection size
     eta_cx          : SBX crossover crowding factor
     eta_mut         : Polynomial mutation crowding factor
+    ml_model        : Trained CropYieldPredictor (optional, enables ML objective)
+    preprocessor    : Fitted AgriculturalPreprocessor (required with ml_model)
     """
 
     def __init__(
@@ -57,8 +59,12 @@ class GeneticAlgorithmOptimizer:
         tournament_size: int = 3,
         eta_cx: float = 20.0,
         eta_mut: float = 20.0,
+        ml_model=None,
+        preprocessor=None,
     ):
-        self.problem       = AgricultureOptimizationProblem(config)
+        self.problem       = AgricultureOptimizationProblem(
+            config, ml_model=ml_model, preprocessor=preprocessor
+        )
         self.pop_size      = pop_size
         self.n_generations = n_generations
         self.cx_prob       = cx_prob

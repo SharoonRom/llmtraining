@@ -34,8 +34,12 @@ class LinearProgrammingOptimizer:
         config: ProblemConfig | None = None,
         n_restarts: int = 20,
         max_iter: int = 1000,
+        ml_model=None,
+        preprocessor=None,
     ):
-        self.problem    = AgricultureOptimizationProblem(config)
+        self.problem    = AgricultureOptimizationProblem(
+            config, ml_model=ml_model, preprocessor=preprocessor
+        )
         self.n_restarts = n_restarts
         self.max_iter   = max_iter
 

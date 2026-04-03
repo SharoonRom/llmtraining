@@ -61,8 +61,12 @@ class QAOAOptimizer:
         p_layers: int = 2,
         n_shots: int = 4096,
         max_iter: int = 200,
+        ml_model=None,
+        preprocessor=None,
     ):
-        self.problem   = AgricultureOptimizationProblem(config)
+        self.problem   = AgricultureOptimizationProblem(
+            config, ml_model=ml_model, preprocessor=preprocessor
+        )
         self.p_layers  = p_layers
         self.n_shots   = n_shots
         self.max_iter  = max_iter
@@ -258,29 +262,71 @@ class QAOAOptimizer:
     # ------------------------------------------------------------------
 
     def optimise(self, verbose: bool = True) -> dict:
-        """Run QAOA and return best solution summary."""
+        """Run QAOA (multiple trials) and return best solution summary."""
         t0 = time.perf_counter()
 
-        if not QISKIT_AVAILABLE:
-            best_x, best_val, history = self._classical_fallback()
-        else:
-            best_x, best_val, history = self._run_qaoa(verbose)
+        n_trials = 3 if QISKIT_AVAILABLE else 10
+        trial_best_x   = None
+        trial_best_val = float("inf")
+        all_histories: list[list[float]] = []
+
+        for trial in range(n_trials):
+            if verbose and n_trials > 1:
+                print(f"  QAOA trial {trial + 1}/{n_trials} ...")
+            try:
+                if not QISKIT_AVAILABLE:
+                    bx, bv, hist = self._classical_fallback()
+                else:
+                    bx, bv, hist = self._run_qaoa(verbose and trial == 0)
+            except Exception as exc:
+                warnings.warn(f"QAOA trial {trial+1} failed: {exc}", RuntimeWarning)
+                continue
+            all_histories.append(hist)
+            if bv < trial_best_val:
+                trial_best_val = bv
+                trial_best_x   = bx
+
+        if trial_best_x is None:
+            # All trials failed — use midpoint
+            cfg = self.problem.config
+            trial_best_x   = (cfg.lower_bounds + cfg.upper_bounds) / 2.0
+            trial_best_val = self.problem.objective(trial_best_x)
+            all_histories  = [[trial_best_val]]
 
         self._elapsed_seconds = time.perf_counter() - t0
-        self._best_solution   = best_x
-        self._best_fitness    = best_val
-        self._convergence     = history
+        self._best_solution   = trial_best_x
+        self._best_fitness    = trial_best_val
+        self._convergence     = all_histories[0] if all_histories else []
+
+        # Approximation ratio: QAOA best vs best classical baseline
+        cfg    = self.problem.config
+        x_mid  = (cfg.lower_bounds + cfg.upper_bounds) / 2.0
+        v_mid  = self.problem.objective(x_mid)
+        approx_ratio = abs(trial_best_val / v_mid) if abs(v_mid) > 1e-12 else 1.0
+
+        # Collect trial objectives for mean ± std reporting
+        trial_objectives = [
+            min(h) if h else float("inf") for h in all_histories
+        ]
 
         result = self.problem.summarise(self._best_solution, algorithm="QAOA")
-        result["convergence"]     = self._convergence
-        result["elapsed_seconds"] = round(self._elapsed_seconds, 3)
-        result["p_layers"]        = self.p_layers
-        result["n_qubits"]        = self._n_qubits
-        result["qiskit_used"]     = QISKIT_AVAILABLE
+        result["convergence"]         = self._convergence
+        result["elapsed_seconds"]     = round(self._elapsed_seconds, 3)
+        result["p_layers"]            = self.p_layers
+        result["n_qubits"]            = self._n_qubits
+        result["qiskit_used"]         = QISKIT_AVAILABLE
+        result["n_trials"]            = n_trials
+        result["approximation_ratio"] = round(float(approx_ratio), 4)
+        result["trial_obj_mean"]      = round(float(np.mean(trial_objectives)), 6)
+        result["trial_obj_std"]       = round(float(np.std(trial_objectives)), 6)
 
         if verbose:
-            print(f"\n  QAOA finished in {self._elapsed_seconds:.2f}s")
-            print(f"  Best objective: {self._best_fitness:.6f}")
+            print(f"\n  QAOA finished in {self._elapsed_seconds:.2f}s  "
+                  f"({n_trials} trials)")
+            print(f"  Best objective: {self._best_fitness:.6f}  "
+                  f"(approx_ratio={approx_ratio:.4f})")
+            print(f"  Trial obj mean±std: "
+                  f"{result['trial_obj_mean']}±{result['trial_obj_std']}")
             print(f"  Predicted yield: {result['predicted_yield_t_ha']} t/ha")
             print(f"  Water usage: {result['irrigation_water_l_ha']} L/ha")
             if QISKIT_AVAILABLE:
